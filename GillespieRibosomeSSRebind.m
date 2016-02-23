@@ -8,12 +8,12 @@ NumGenes = 30;
 RibosomesInitial = 300*NumGenes;
 Runs = 50;
 
-kB = .001; %ribosome binding rate from initial pool
+kB = .002; %ribosome binding rate from initial pool
 kON = .001;%gene burst on rate
 kOFF = 1; %gene burst off rate
 alpha = 5; %mRNA production rate
-gammam = log(2)/10; %mRNA decay rate, 5min halflife
-kRb = 1; %rebinding rate from local pool
+gammam = log(2)/5; %mRNA decay rate, 5min halflife
+kRb = 10; %rebinding rate from local pool
 kRR = .01; %rate to re-randomize, return to large pool
 
 tMax = 600;
