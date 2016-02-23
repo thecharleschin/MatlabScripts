@@ -301,15 +301,21 @@ burstMbin(burstMbin == 0) = NaN;
 %burstR(isnan(burstR)) = [];
 binM = zeros(length(binInterval),1);
 binR = binM;
+binRnum = binR;
 
 for i = 2:length(binInterval)
 	for j = 1:length(burstRbin(:))
 		if burstMbin(j) >= binInterval(i-1) && burstMbin(j) < binInterval(i)
-			binM(i) = burstMbin(j); 
-            binR(i) = burstRbin(j);
+			binM(i-1) = burstMbin(j); 
+            if isnan(burstRbin(j))
+            else
+                binR(i-1) = binR(i-1) + burstRbin(j);
+                binRnum(i-1) = binRnum(i-1) + 1;
+            end
         end
     end
 end
+binR = binR ./ binRnum;
 
 hold on
 plot(burstM,burstR,'linestyle','none','marker','.','markersize',10)
