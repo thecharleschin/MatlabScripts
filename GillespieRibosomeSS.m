@@ -6,7 +6,7 @@ rand('state',sum(100*clock)); %ok<RAND>
 
 NumGenes = 30;
 RibosomesInitial = 300*NumGenes;
-Runs = 100;
+Runs = 500;
 
 kB = .001;
 kON = .001;
@@ -14,7 +14,7 @@ kOFF = 1;
 alpha = 5; %20 seconds a transcript, 3 per min
 gammam = log(2)/2;
 
-tMax = 600;
+tMax = 300;
 startTime = 101;
 dt = 1;
 tspan = startTime:dt:tMax;
@@ -68,7 +68,7 @@ for i = 1:Runs
     %X(1,:)   = x0;
     RxnCount = 1;
     T = 0; %Time
-    mRNAArray = zeros(MaxOutput,2);
+    mRNAArray = zeros(MaxOutput,6);
     Ttrack = zeros(length(tspan), 1); %Time tracking
     XGenes = zeros(length(tspan), NumGenes*2); %Species number tracking
     XmRNA = zeros(length(tspan),length(mRNAArray(:,1)));
@@ -272,7 +272,7 @@ for i = 1:Runs
     burstM(count,i) = 1;
     burstR(count,i) = temp(1,6);
     j = 2;
-    while j <= length(temp)
+    while j <= length(temp(:,1))
         if temp(j,2) == burstIdx1 && temp(j,3) == burstIdx2
             burstM(count,i) = burstM(count,i) + 1;
             burstR(count,i) = burstR(count,i) + temp(j,6);
@@ -326,3 +326,48 @@ xlabel('Burst Size (mRNA per Burst)','FontSize',15)
 ylabel('Burst Size (Ribosomes per mRNA)','FontSize',15)
 title('Ribosomes per mRNA vs mRNA per Burst')
 saveas(gcf,'BurstSizemRNARibosome.jpg')
+%%
+%Alt method of plotting burst
+% mean burst size and burst size for each run
+burstMalt = burstM;
+burstRalt = burstR;
+burstMalt(burstMalt == 0) = NaN;
+burstRalt(burstRalt == 0) = NaN;
+burstMmean = nanmean(burstMalt,1);
+burstRmean = nanmean(burstRalt,1);
+
+%bin data to take average
+binInterval = 1:1:40;
+burstMbinalt = burstMmean(:);
+burstRbinalt = burstRmean(:);
+
+%burstR(isnan(burstR)) = [];
+binMalt = zeros(length(binInterval),1);
+binRalt = binMalt;
+binRnumalt = binRalt;
+
+for i = 2:length(binInterval)
+	for j = 1:length(burstRbinalt(:))
+		if burstMbinalt(j) >= binInterval(i-1) && burstMbinalt(j) < binInterval(i)
+			binMalt(i-1) = burstMbinalt(j); 
+            if isnan(burstRbinalt(j))
+            else
+                binRalt(i-1) = binRalt(i-1) + burstRbinalt(j);
+                binRnumalt(i-1) = binRnumalt(i-1) + 1;
+            end
+        end
+    end
+end
+
+binRalt = binRalt ./ binRnumalt;
+
+figure
+hold on
+plot(burstMmean,burstRmean,'linestyle','none','marker','.','markersize',10)
+set(gca,'YScale','log');
+c = colormap(jet(length(binInterval)));
+plot(binInterval,binRalt,'linestyle','none','marker','o','markersize',8,'markerfacecolor','b','markeredgecolor','k')
+xlabel('Burst Size (mRNA per Burst)','FontSize',15)
+ylabel('Burst Size (Ribosomes per mRNA)','FontSize',15)
+title('Rebinding Ribosomes per mRNA vs mRNA per Burst')
+saveas(gcf,'AltRebindingBurstSizemRNARibosome.jpg')
