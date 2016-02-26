@@ -1,5 +1,5 @@
 %base Gillespie Algorithm for general purpose simulations.
-
+%liz edited this file on this line
 clear all
 close all
 rand('state',sum(100*clock)); %#ok<RAND>
@@ -90,3 +90,4 @@ end
 count = count - 1;
 mRNAData = X(1:tMax/dt,1);
 ProteinData = X(1:tMax/dt,2);
+%and also on this line
