@@ -1,24 +1,26 @@
 clear all
 close all
 rand('state',sum(100*clock)); %ok<RAND>
- MaxOutput = 1000; %Maximum size expected of the output file
+MaxOutput = 1000; %Maximum size expected of the output file
 
 
-NumGenes = 30;
-RibosomesInitial = 300*NumGenes;
-Runs = 500;
+NumGenes = 10;
+RibosomesInitial = 200*NumGenes;
+Runs = 1;
 
 kB = .001; %ribosome binding rate from initial pool
-kON = .001;%gene burst on rate
+kON = .01;%gene burst on rate
 kOFF = 1; %gene burst off rate
-alpha = 5; %mRNA production rate
-gammam = log(2)/2; %mRNA decay rate, 5min halflife
-kRb = 10; %rebinding rate from local pool
+alpha = 2; %mRNA production rate
+gammam = log(2)/10; %mRNA decay rate, 5min halflife
+kRb = .1; %rebinding rate from local pool
 kRR = .1; %rate to re-randomize, return to large pool
+kP = 1;
+gammap = log(2)/20;
 
 tMax = 300;
-startTime = 101;
-dt = 1;
+startTime = 1;
+dt = .1;
 tspan = startTime:dt:tMax;
 tspan2 = length(tspan);
 
@@ -77,17 +79,19 @@ for i = 1:Runs
     %X(1,:)   = x0;
     RxnCount = 1;
     T = 0; %Time
-    mRNAArray = zeros(MaxOutput,2);
+    mRNAArray = zeros(MaxOutput,7);
     Ttrack = zeros(length(tspan), 1); %Time tracking
     XGenes = zeros(length(tspan), NumGenes*2); %Species number tracking
     XmRNA = zeros(length(tspan),length(mRNAArray(:,1)));
     XRibosomes = XmRNA;
+    XProtein = XRibosomes;
     Ribosomes = RibosomesInitial;
     XGenes(1,:)   = Genes;
     xCurrentGenes = Genes;
     xCurrentLocalPools = LocalPools;
     xCurrentmRNA = zeros(MaxOutput,1);
     xCurrentRibosomes = zeros(MaxOutput,1);
+    xCurrentProtein = zeros(MaxOutput,1);
     mRNATotals = zeros(1,NumGenes);
     BurstTrack = zeros(1,NumGenes); %track burst index
     BurstSizeTrack = zeros(MaxOutput,NumGenes);%brst size track
@@ -122,7 +126,10 @@ for i = 1:Runs
         %binding propensities
         aRibosomes = xCurrentmRNA(:,1) .* Ribosomes .* kB;
         %unbinding propensities
-        aGamma = xCurrentmRNA(:,1) .* gammam;
+        aGammam = xCurrentmRNA(:,1) .* gammam;
+        %protein propensities
+        aProtein = xCurrentRibosomes .* kP;
+        aProteinDecay = xCurrentProtein .* gammap;
         
         %local pool propensities
         for j = 1:NumGenes
@@ -132,7 +139,8 @@ for i = 1:Runs
 
 
         % Compute tau and mu using random variables
-        a0 = sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aGamma) + sum(aLocalPools);
+        a0 = sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aGammam) + ...
+            sum(aLocalPools) + +sum(aProtein) + sum(aProteinDecay);
         r = rand(1,2);
         %tau = -log(r(1))/a0;
         tau = (1/a0)*log(1/r(1));
@@ -144,6 +152,7 @@ for i = 1:Runs
                 XGenes(RecordCount,:) = xCurrentGenes;
                 XmRNA(RecordCount,:) = xCurrentmRNA(:,1);
                 XRibosomes(RecordCount,:) = xCurrentRibosomes;
+                XProtein(RecordCount,:) = xCurrentProtein;
                 RecordCount = RecordCount + 1;
                 RecordTime = RecordTime + dt;
                 tau0 = tau0 - dt;
@@ -154,6 +163,7 @@ for i = 1:Runs
             XGenes(RecordCount,:) = xCurrentGenes;
             XmRNA(RecordCount,:) = xCurrentmRNA(:,1);
             XRibosomes(RecordCount,:) = xCurrentRibosomes;
+            XProtein(RecordCount,:) = xCurrentProtein;
             RecordCount = RecordCount + 1;
             RecordTime = RecordTime + dt;
 
@@ -195,8 +205,8 @@ for i = 1:Runs
             %xCurrentGenes = xCurrentGenes + RxnMatrixGene(mu,:);
             xCurrentRibosomes(mu) = xCurrentRibosomes(mu) + 1;
             Ribosomes = Ribosomes - 1;
-        elseif r(2)*a0 < sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aGamma)
-            mu  = find((sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + cumsum(aGamma) >= r(2)*a0),1,'first');
+        elseif r(2)*a0 < sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aGammam)
+            mu  = find((sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + cumsum(aGammam) >= r(2)*a0),1,'first');
             %find the next change in state before tau
             T   = T  + tau;
             %xCurrentGenes = xCurrentGenes + RxnMatrixGene(mu,:);
@@ -214,13 +224,15 @@ for i = 1:Runs
 %                 
             UnbindingRibosomes = xCurrentRibosomes(mu);
             mRNAArray(mu,6) = UnbindingRibosomes;
+            mRNAArray(mu,7) = xCurrentProtein(mu);
             xCurrentLocalPools(mRNAArray(mu,2)) = xCurrentLocalPools(mRNAArray(mu,2)) + UnbindingRibosomes;
             BurstRTrack(mRNAArray(mu,2)) = BurstRTrack(mRNAArray(mu,2))+1;
             BurstSizeRTrack(BurstRTrack(mRNAArray(mu,2)),mRNAArray(mu,2)) = UnbindingRibosomes;
             xCurrentRibosomes(mu) = 0;
             
-        else
-            mu  = find((sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aGamma) + cumsum(aLocalPools) >= r(2)*a0),1,'first');
+        elseif r(2)*a0 < sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aGammam)...
+                + sum(aLocalPools)
+            mu  = find((sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aGammam) + cumsum(aLocalPools) >= r(2)*a0),1,'first');
             %find the next change in state before tau
             T   = T  + tau;
             if mu <= NumGenes
@@ -241,6 +253,20 @@ for i = 1:Runs
                 xCurrentLocalPools(mu-NumGenes) = xCurrentLocalPools(mu-NumGenes) - 1;
                 Ribosomes = Ribosomes + 1;
             end
+        elseif r(2)*a0 < sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aGammam)...
+                + sum(aLocalPools) + sum(aProtein)
+           mu  = find((sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aGammam) ...
+                + sum(aLocalPools) + cumsum(aProtein) >= r(2)*a0),1,'first');
+            %find the next change in state before tau
+            T   = T  + tau;
+            xCurrentProtein(mu) = xCurrentProtein(mu) + 1;
+        else
+            mu  = find((sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + cumsum(aGammam)...
+                + sum(aLocalPools) + sum(aProtein) + cumsum(aProteinDecay)>= r(2)*a0),1,'first');
+            %find the next change in state before tau
+            T   = T  + tau;
+            xCurrentProtein(mu) = xCurrentProtein(mu) - 1;
+            
         end
 
 
@@ -252,6 +278,7 @@ for i = 1:Runs
      XGenes(RecordCount,:) = xCurrentGenes;
      XmRNA(RecordCount,:) = xCurrentmRNA(:,1);
      XRibosomes(RecordCount,:) = xCurrentRibosomes;
+     XProtein(RecordCount,:) = xCurrentProtein;
 
      mRNATotnum(i) = sum(mRNATotals);
 %          for j = 1:mRNATotnum(i)
@@ -261,9 +288,10 @@ for i = 1:Runs
     % Record output
     count = count - 1;
     mRNATotalsRuns(i,:) = mRNATotals;
-    GeneRuns(i,:,:) = XGenes(startTime:tspan(end),1:NumGenes);
-    mRNARuns(i,:,:) = XmRNA(startTime:tspan(end),:);
-    RibosomeRuns(i,:,:) = XRibosomes(startTime:tspan(end),:);
+    GeneRuns(i,:,:) = XGenes(startTime/dt:tMax/dt,1:NumGenes);
+    mRNARuns(i,:,:) = XmRNA(startTime/dt:tMax/dt,:);
+    RibosomeRuns(i,:,:) = XRibosomes(startTime/dt:tMax/dt,:);
+    ProteinRuns(i,:,:) =  XProtein(startTime/dt:tMax/dt,:);
     AllmRNAArray(:,:,i) = mRNAArray; 
     BurstTrackRuns(i,:) = BurstTrack;
     BurstSizeRuns(i,:,:) = BurstSizeTrack;
@@ -281,12 +309,55 @@ for i = 1:Runs
 
 
 end
-   
+%%
+%calculations
+hold on
+for i = 1:Runs
+    Idx = find(AllmRNAArray(:,2));
+    for j = 1:length(Idx)
+        plot(tspan,RibosomeRuns(i,:,j))
+    end
+    %axis([50 125 0 160])
+end
+xlabel('Time (min)','FontSize',15)
+ylabel('Bound Ribosomes','FontSize',15)
+title('BoundRibosomePermRNA')
+saveas(gcf,'RibosomeTraces.jpg')
+%%
+figure
+hold on
+for i = 1:Runs
+    Idx = find(AllmRNAArray(:,2));
+    for j = 1:length(Idx)
+        plot(tspan,ProteinRuns(i,:,j))
+    end
+    %axis([50 125 0 160])
+end
+xlabel('Time (min)','FontSize',15)
+ylabel('Protein per mRNA','FontSize',15)
+title('Protein produced per mRNA')
+saveas(gcf,'ProteinTraces.jpg')
+
+%%
+figure
+hold on
+for i = 1:Runs
+    RibosomeTotals(i,:) = sum(RibosomeRuns(i,:,:),3);
+    plot(RibosomeTotals(i,:))
+end
+figure
+hold on
+for i = 1:Runs
+    ProteinTotals(i,:) = sum(ProteinRuns(i,:,:),3);
+    plot(ProteinTotals(i,:))
+end
+%%
 save AllData
 %%
 
 burstM = zeros(1000,Runs);
 burstR = zeros(1000,Runs);
+burstP = zeros(1000,Runs);
 
 for i = 1:Runs
     temp = AllmRNAArray(:,:,i);
@@ -308,15 +379,18 @@ for i = 1:Runs
     burstIdx2 = temp(1,3);
     burstM(count,i) = 1;
     burstR(count,i) = temp(1,6);
+    burstP(count,i) = temp(1,7);
     j = 2;
     while j <= length(temp(:,1))
         if temp(j,2) == burstIdx1 && temp(j,3) == burstIdx2
             burstM(count,i) = burstM(count,i) + 1;
             burstR(count,i) = burstR(count,i) + temp(j,6);
+            burstP(count,i) = burstP(count,i) + temp(j,7);
         else
             count = count + 1;
             burstM(count,i) = burstM(count,i) + 1;
             burstR(count,i) = burstR(count,i) + temp(j,6);
+            burstP(count,i) = burstP(count,i) + temp(j,7);
             burstIdx1 = temp(j,2);
             burstIdx2 = temp(j,3);
         end
@@ -324,18 +398,26 @@ for i = 1:Runs
         j = j+ 1;
     end
     burstR(:,i) = burstR(:,i)./burstM(:,i);
+    burstP(:,i) = burstP(:,i)./burstM(:,i);
+    
 end
+
 %%
+figure
+plot(burstM,burstP,'linestyle','none','marker','.','markersize',8)
+set(gca,'YScale','log');
+
+%%
+figure
 plot(burstM,burstR,'linestyle','none','marker','.','markersize',8)
 set(gca,'YScale','log');
 
 %%
 %bin data to take average
-binInterval = 1:2:40;
+binInterval = 0:2:40;
 burstMbin = burstM(:);
 burstRbin = burstR(:);
 burstMbin(burstMbin == 0) = NaN;
-
 %burstR(isnan(burstR)) = [];
 binM = zeros(length(binInterval),1);
 binR = binM;
@@ -353,7 +435,6 @@ for i = 2:length(binInterval)
         end
     end
 end
-
 binR = binR ./ binRnum;
 
 hold on
@@ -363,60 +444,50 @@ c = colormap(jet(length(binInterval)));
 plot(binInterval,binR,'linestyle','none','marker','o','markersize',8,'markerfacecolor','b','markeredgecolor','k')
 xlabel('Burst Size (mRNA per Burst)','FontSize',15)
 ylabel('Burst Size (Ribosomes per mRNA)','FontSize',15)
-title('Rebinding Ribosomes per mRNA vs mRNA per Burst')
-saveas(gcf,'RebindingBurstSizemRNARibosome.jpg')
-
+title('Ribosomes per mRNA vs mRNA per Burst')
+saveas(gcf,'BurstSizemRNARibosome.jpg')
 %%
 %Alt method of plotting burst
 % mean burst size and burst size for each run
 burstMalt = burstM;
-burstRalt = burstR;
+burstPalt = burstP;
 burstMalt(burstMalt == 0) = NaN;
-burstRalt(burstRalt == 0) = NaN;
+burstPalt(burstPalt == 0) = NaN;
 burstMmean = nanmean(burstMalt,1);
-burstRmean = nanmean(burstRalt,1);
+burstPmean = nanmean(burstPalt,1);
 
 %bin data to take average
 binInterval = 1:1:40;
 burstMbinalt = burstMmean(:);
-burstRbinalt = burstRmean(:);
+burstPbinalt = burstPmean(:);
 
 %burstR(isnan(burstR)) = [];
 binMalt = zeros(length(binInterval),1);
-binRalt = binMalt;
-binRnumalt = binRalt;
+binPalt = binMalt;
+binPnumalt = binPalt;
 
 for i = 2:length(binInterval)
-	for j = 1:length(burstRbinalt(:))
+	for j = 1:length(burstPbinalt(:))
 		if burstMbinalt(j) >= binInterval(i-1) && burstMbinalt(j) < binInterval(i)
 			binMalt(i-1) = burstMbinalt(j); 
-            if isnan(burstRbinalt(j))
+            if isnan(burstPbinalt(j))
             else
-                binRalt(i-1) = binRalt(i-1) + burstRbinalt(j);
-                binRnumalt(i-1) = binRnumalt(i-1) + 1;
+                binPalt(i-1) = binPalt(i-1) + burstPbinalt(j);
+                binPnumalt(i-1) = binPnumalt(i-1) + 1;
             end
         end
     end
 end
 
-binRalt = binRalt ./ binRnumalt;
+binPalt = binPalt ./ binPnumalt;
 
 figure
 hold on
-plot(burstMmean,burstRmean,'linestyle','none','marker','.','markersize',10)
+plot(burstMmean,burstPmean,'linestyle','none','marker','.','markersize',10)
 set(gca,'YScale','log');
 c = colormap(jet(length(binInterval)));
-plot(binInterval,binRalt,'linestyle','none','marker','o','markersize',8,'markerfacecolor','b','markeredgecolor','k')
+plot(binInterval,binPalt,'linestyle','none','marker','o','markersize',8,'markerfacecolor','b','markeredgecolor','k')
 xlabel('Burst Size (mRNA per Burst)','FontSize',15)
-ylabel('Burst Size (Ribosomes per mRNA)','FontSize',15)
-title('Rebinding Ribosomes per mRNA vs mRNA per Burst')
-saveas(gcf,'AltRebindingBurstSizemRNARibosome.jpg')
-%%
-% figure 
-% hold on
-% 
-% for i = 1:Runs
-%     for j = 1:100
-%     plot(RibosomeRuns(i,:,j))
-%     end
-% end
+ylabel('Burst Size (Protein per mRNA)','FontSize',15)
+title('Rebind Protein per mRNA vs mRNA per Burst')
+saveas(gcf,'AltRebindBurstSizemRNAProtein.jpg')
