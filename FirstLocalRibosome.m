@@ -1,23 +1,23 @@
 clear all
 close all
 rand('state',sum(100*clock)); %ok<RAND>
-MaxOutput = 1000; %Maximum size expected of the output file
+MaxOutput = 100; %Maximum size expected of the output file
 
 
 NumGenes = 5;
 RibosomesInitial = 300*NumGenes;
 Runs = 1;
 
-kON = .1;%gene burst on rate
+kON = .01;%gene burst on rate
 kOFF = 1; %gene burst off rate
-alpha = 1; %mRNA production rate
+alpha = 2; %mRNA production rate
 gammam = log(2)/5; %mRNA decay rate, 5min halflife
 kIN = 1; %rebinding rate from local pool
 kOUT = .1; %rate to re-randomize, return to large pool
 kP = .1;
 gammap = log(2)/20;
 
-tMax = 100;
+tMax = 500;
 startTime = 1;
 dt = 1;
 tspan = startTime:dt:tMax;
@@ -33,14 +33,17 @@ Genes(NumGenes+1:end) = 1;
 
 GeneRuns = zeros(Runs,tspan2,NumGenes);
 
+BurstArray = zeros(MaxOutput,2,NumGenes);
+BurstIdx = zeros(NumGenes,1);
+
 
 %Build Rxn Matrix and Propensity for genes and local pools
-%#GenesON #GenesOFF #mRNAPools #LocalRibosomePools GlobalRibosomePool Protein
-%NumGenes NumGenes NumGenes NumGenes 1 1
+%#GenesON #GenesOFF #mRNAPools #LocalRibosomePools #Protein GlobalRibosomePool
+%NumGenes NumGenes NumGenes NumGenes NumGenes 1
 %#AllBurstON #AllBurstOFF #AllTranscription #AllmRNADecay #AllLocalIN #AllLocalOUT #AllTranslation #AllProteinDecay
 %NumGenes NumGenes NumGenes NumGenes NumGenes NumGenes NumGenes NumGenes
 
-RxnMatrix = zeros(NumGenes*8,NumGenes*4+2);
+RxnMatrix = zeros(NumGenes*8,NumGenes*5+1);
 
 for i = 1:NumGenes
     RxnMatrix(i,i) = 1; %BurstON ONstate
@@ -51,20 +54,20 @@ for i = 1:NumGenes
     RxnMatrix(i+NumGenes*3,i+NumGenes*2) = -1; %mRNADecay
     RxnMatrix(i+NumGenes*4,i+NumGenes*3) = 1; %LocalIN
     RxnMatrix(i+NumGenes*5,i+NumGenes*3) = -1; %LocalOUT
+    RxnMatrix(i+NumGenes*6,i+NumGenes*4) = 1; %Translation
+    RxnMatrix(i+NumGenes*7,i+NumGenes*4) = -1; %ProteinDecay 
    
 end
 
-RxnMatrix(NumGenes*4+1:NumGenes*5,NumGenes*4+1) = -1; %LocalIN
-RxnMatrix(NumGenes*5+1:NumGenes*6,NumGenes*4+1) = 1; %LocalOUT
-RxnMatrix(NumGenes*6+1:NumGenes*7,NumGenes*4+2) = 1; %Translation
-RxnMatrix(NumGenes*7+1:NumGenes*8,NumGenes*4+2) = -1; %ProteinDecay 
+RxnMatrix(NumGenes*4+1:NumGenes*5,NumGenes*5+1) = -1; %LocalIN
+RxnMatrix(NumGenes*5+1:NumGenes*6,NumGenes*5+1) = 1; %LocalOUT
 
 
-x0 = zeros(1,NumGenes*4+2);
+
+x0 = zeros(1,NumGenes*5+1);
 x0(1+NumGenes:NumGenes*2) = 1;
-x0(NumGenes*4+1) = RibosomesInitial;
+x0(NumGenes*5+1) = RibosomesInitial;
 aAll = zeros(NumGenes*8,1);
-
 %
 
 for i = 1:Runs
@@ -75,7 +78,7 @@ for i = 1:Runs
     RxnCount = 1;
     T = 0; %Time
     
-    X = zeros(length(tspan), NumGenes*4+2); %Species number tracking
+    X = zeros(length(tspan), NumGenes*5+1); %Species number tracking
     X(1,:)   = x0;
     xCurrent = x0;
 
@@ -98,8 +101,8 @@ for i = 1:Runs
         StateOFF = x(NumGenes+1:NumGenes*2);
         mRNA = x(NumGenes*2+1:NumGenes*3);
         Local = x(NumGenes*3+1:NumGenes*4);
-        Global = x(NumGenes*4+1);
-        Protein = x(NumGenes*4+2);
+        Protein = x(NumGenes*4+1:NumGenes*5);
+        Global = x(NumGenes*5+1);
         
         for j = 1:NumGenes
             aAll(j) = kON*StateOFF(j); %Burst ON
@@ -113,7 +116,7 @@ for i = 1:Runs
                 aAll(j+NumGenes*5) = Local(j)*kOUT/mRNA(j);
             end
             aAll(j+NumGenes*6) = kP*mRNA(j)*Local(j); %Translation
-            aAll(j+NumGenes*7) = gammap*Protein;    %ProteinDecay
+            aAll(j+NumGenes*7) = gammap*Protein(j);    %ProteinDecay
         end
         
         
@@ -145,6 +148,15 @@ for i = 1:Runs
             T   = T  + tau;
             xCurrent = xCurrent + RxnMatrix(mu,:);
 
+            if mu <= NumGenes
+                BurstIdx(mu) = BurstIdx(mu) + 1;
+            elseif mu > NumGenes*2 && mu <= NumGenes*3
+                BurstArray(BurstIdx(mu - NumGenes*2),1,mu - NumGenes*2) = ...
+                    BurstArray(BurstIdx(mu - NumGenes*2),1,mu - NumGenes*2) +1;
+            elseif mu > NumGenes*4 && mu <= NumGenes*5
+                BurstArray(BurstIdx(mu - NumGenes*4),2,mu - NumGenes*4) = ...
+                    BurstArray(BurstIdx(mu - NumGenes*4),2,mu - NumGenes*4) +1;
+            end
     end
 
 
