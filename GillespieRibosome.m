@@ -28,6 +28,8 @@ for k = 1:FullTrials
     kON = .001;
     kOFF = 2;
     alpha = 5; %20 seconds a transcript, 3 per min
+    kP = 1;
+    lambda = 0.05;
     
     tMax = 100;
     dt = 1;
@@ -85,11 +87,13 @@ for k = 1:FullTrials
         XGenes = zeros(length(tspan), NumGenes*2); %Species number tracking
         XmRNA = zeros(length(tspan),length(mRNAArray(:,1)));
         XRibosomes = XmRNA;
+        XProtein = XRibosomes;
         Ribosomes = RibosomesInitial;
         XGenes(1,:)   = Genes;
         xCurrentGenes = Genes;
         xCurrentmRNA = zeros(1000,1);
         xCurrentRibosomes = zeros(1000,1);
+        xCurrentProtein = zeros(1000,1);
         mRNATotals = zeros(1,NumGenes);
         BurstTrack = zeros(1,NumGenes); %track burst index
         BurstSizeTrack = zeros(1000,NumGenes);%brst size track
@@ -110,7 +114,10 @@ for k = 1:FullTrials
 
             % Calculate reaction propensities
             x = xCurrentGenes;
-
+            
+            %translation decay
+            kPdecay = kP*exp(-lambda*T);
+            
             for j = 1:NumGenes
                 aGenes(j) = kON*xCurrentGenes(NumGenes+j);
                 aGenes(j+NumGenes) = kOFF*xCurrentGenes(j);
@@ -122,9 +129,14 @@ for k = 1:FullTrials
             %unbinding propensities
             aRibosomesU = xCurrentRibosomes .* kUb;
             
+            %Translation Propensities
+            aProtein = xCurrentRibosomes .* kPdecay;
+            
+            
+            
             
             % Compute tau and mu using random variables
-            a0 = sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aRibosomesU);
+            a0 = sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aRibosomesU) + sum(aProtein);
             r = rand(1,2);
             %tau = -log(r(1))/a0;
             tau = (1/a0)*log(1/r(1));
@@ -136,6 +148,7 @@ for k = 1:FullTrials
                     XGenes(RecordCount,:) = xCurrentGenes;
                     XmRNA(RecordCount,:) = xCurrentmRNA(:,1);
                     XRibosomes(RecordCount,:) = xCurrentRibosomes;
+                    XProtein(RecordCount,:) = xCurrentProtein;
                     RecordCount = RecordCount + 1;
                     RecordTime = RecordTime + dt;
                     tau0 = tau0 - dt;
@@ -146,6 +159,7 @@ for k = 1:FullTrials
                 XGenes(RecordCount,:) = xCurrentGenes;
                 XmRNA(RecordCount,:) = xCurrentmRNA(:,1);
                 XRibosomes(RecordCount,:) = xCurrentRibosomes;
+                XProtein(RecordCount,:) = xCurrentProtein;
                 RecordCount = RecordCount + 1;
                 RecordTime = RecordTime + dt;
 
@@ -186,13 +200,19 @@ for k = 1:FullTrials
                 %xCurrentGenes = xCurrentGenes + RxnMatrixGene(mu,:);
                 xCurrentRibosomes(mu) = xCurrentRibosomes(mu) + 1;
                 Ribosomes = Ribosomes - 1;
-            else
+            elseif r(2)*a0 < sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + sum(aRibosomesU)
                 mu  = find((sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + cumsum(aRibosomesU) >= r(2)*a0),1,'first');
                 %find the next change in state before tau
                 T   = T  + tau;
                 %xCurrentGenes = xCurrentGenes + RxnMatrixGene(mu,:);
                 xCurrentRibosomes(mu) = xCurrentRibosomes(mu) - 1;
                 Ribosomes = Ribosomes + 1;
+            else
+                mu  = find((sum(aGenes) + sum(aAlpha) + sum(aRibosomes) + ...
+                    sum(aRibosomesU) + cumsum(aProtein) >= r(2)*a0),1,'first');
+                %find the next change in state before tau
+                T   = T  + tau;
+                xCurrentProtein(mu) = xCurrentProtein(mu) + 1;
             end
             
             
@@ -204,6 +224,7 @@ for k = 1:FullTrials
          XGenes(RecordCount,:) = xCurrentGenes;
          XmRNA(RecordCount,:) = xCurrentmRNA(:,1);
          XRibosomes(RecordCount,:) = xCurrentRibosomes;
+         XProtein(RecordCount,:) = xCurrentProtein;
          
          mRNATotnum(i) = sum(mRNATotals);
          for j = 1:mRNATotnum(i)
@@ -216,6 +237,7 @@ for k = 1:FullTrials
         GeneRuns(i,:,:) = XGenes(1:tspan2,1:NumGenes);
         mRNARuns(i,:,:) = XmRNA(1:tspan2,:);
         RibosomeRuns(i,:,:) = XRibosomes(1:tspan2,:);
+        ProteinRuns(i,:,:) = XProtein(1:tspan2,:);
         mRNAIdx(i,:) = mRNAArray(:,2); 
         mRNAArrayRuns(i,:,:) = mRNAArray;
         BurstTrackRuns(i,:) = BurstTrack;
@@ -235,6 +257,7 @@ for k = 1:FullTrials
     end
    
    AllRibosomeRuns(k,:,:,:) = RibosomeRuns;
+   AllProteinRuns(k,:,:,:) = ProteinRuns;
    AllmRNARuns(k,:,:,:) = mRNARuns;
    AllmRNAArray(k,:,:,:) = mRNAArrayRuns;
    AllRibosomesPerGene(k,1:Runs,1:NumGenes) = RibosomesPerGene;
@@ -263,6 +286,11 @@ for k = 1:FullTrials
         tempsum = sum(temp,2);
         AllTotalRibosomes(k,j,:) = tempsum;
         EndmRNAwRibosomes(k,j) = length(RibosomeIdx); 
+        
+        temp = AllProteinRuns(k,j,:,:);
+        temp = reshape(temp,[tspan2,1000]);
+        tempsum = sum(temp,2);
+        AllTotalProteins(k,j,:) = tempsum;
     end
     
     for j = 1:Runs
@@ -274,7 +302,10 @@ for k = 1:FullTrials
     temp = mean(AllTotalRibosomes(k,:,:),2);
     TotalRibosomesGenTrend(k,:) = temp(:);
     
-   
+    temp = mean(AllTotalProteins(k,:,:),2);
+    TotalProteinsGenTrend(k,:) = temp(:);
+    
+    %calculate cv2 for ribosomes
     for j = 1:Runs
         TotalRibosomeSS(k,j) = AllTotalRibosomes(k,j,end);
         temp = AllTotalRibosomes(k,j,:);
@@ -285,6 +316,16 @@ for k = 1:FullTrials
         
     end
     
+    %calculate cv2 for protein
+    for j = 1:Runs
+        TotalProteinSS(k,j) = AllTotalProteins(k,j,end);
+        temp = AllTotalProteins(k,j,:);
+        temp2 = TotalProteinsGenTrend(k,:);
+        TotalProteinA(k,j,:) = temp(:) - temp2(:);
+        TotalProteinVar(k,j) = var(TotalProteinA(k,j,:));
+        TotalProteincv2(k,j) =  TotalProteinVar(k,j)/TotalProteinSS(k,j)^2;
+        
+    end
 
 end
 
@@ -472,7 +513,7 @@ saveas(gcf,'RibsomesperGenevsmRNAperGene.jpg')
 % title('Total Ribosome over time')
 % saveas(gcf,'RibsomesTotalOverTime.jpg')
 %%
-%plot cv2 vs abundance
+%plot cv2 vs abundance Ribosome
 figure
 hold on
 c = colormap(jet(FullTrials));
@@ -511,6 +552,51 @@ xlabel('Ribosome Abundance','FontSize',15)
 ylabel('Ribosome cv^2','FontSize',15)
 title('Total Ribosome cv^2 vs Abundance')
 saveas(gcf,'Ribsomescv2abundance.jpg')
+%%
+%plot cv2 vs abundance Protein
+figure
+hold on
+c = colormap(jet(FullTrials));
+for k = 1:FullTrials
+    
+    plot(TotalProteinSS(k,:),TotalProteincv2(k,:),'color',c(k,:),...
+        'linestyle','none','marker','.','markersize',10)
+
+end
+
+for k = 1:FullTrials
+    tempSS = TotalProteinSS(k,:);
+    tempSS(tempSS == 0) = NaN;
+    s = isnan(tempSS);
+    SSmean(k) = geomean(tempSS(~s));
+    tempcv2 = TotalProteincv2(k,:);
+    tempcv2(tempcv2 == Inf) = NaN;
+    
+    s = isnan(tempcv2);
+    cv2mean(k) = geomean(tempcv2(~s));
+    plot(SSmean(k),cv2mean(k),'marker','o','markerfacecolor',c(k,:),...
+        'linestyle','none','markersize',8,'markeredgecolor','k')
+
+end
+
+offset = [10^1,10^5,10^6,10^7,10^8];
+
+xrange = 100:10000;
+yrange = offset(1)./(xrange)  ;
+plot(xrange,yrange,'color','k')
+
+offset = [10^1,10^5,10^6,10^7,10^8];
+xrange = 10:10000;
+yrange = offset(2)./(xrange).^2  ;
+plot(xrange,yrange,'color','k','linestyle','--')
+
+set(gca,'XScale','log');
+set(gca,'YScale','log');
+%axis([10 100000 10^-4 100]);
+xlabel('Protein Abundance','FontSize',15)
+ylabel('Protein cv^2','FontSize',15)
+title('Total Protein cv^2 vs Abundance')
+saveas(gcf,'Proteincv2abundance.jpg')
 %%
 figure
 hold on
