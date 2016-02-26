@@ -5,22 +5,22 @@ MaxOutput = 1000; %Maximum size expected of the output file
 
 
 NumGenes = 10;
-RibosomesInitial = 200*NumGenes;
-Runs = 1;
+RibosomesInitial = 300*NumGenes;
+Runs = 200;
 
 kB = .001; %ribosome binding rate from initial pool
-kON = .01;%gene burst on rate
+kON = .0005;%gene burst on rate
 kOFF = 1; %gene burst off rate
-alpha = 2; %mRNA production rate
-gammam = log(2)/10; %mRNA decay rate, 5min halflife
-kRb = .1; %rebinding rate from local pool
+alpha = 1; %mRNA production rate
+gammam = log(2)/5; %mRNA decay rate, 5min halflife
+kRb = 1; %rebinding rate from local pool
 kRR = .1; %rate to re-randomize, return to large pool
-kP = 1;
+kP = .1;
 gammap = log(2)/20;
 
 tMax = 300;
-startTime = 1;
-dt = .1;
+startTime = 101;
+dt = 1;
 tspan = startTime:dt:tMax;
 tspan2 = length(tspan);
 
@@ -69,7 +69,7 @@ end
 
 %
 
-for i = 1:Runs
+parfor i = 1:Runs
 
     disp('run')
     disp(i)
@@ -101,7 +101,10 @@ for i = 1:Runs
     BurstRTimes = zeros(MaxOutput,NumGenes);%burst time track
     OnTrack = zeros(1,NumGenes); %Burst state track
     UniqueBurst = 0;
-
+    aGenes = zeros(NumGenes*2,1);
+    aAlpha = zeros(NumGenes,1);
+    aLocalPools = zeros(NumGenes*2,1);
+    
     RecordTime = dt; %Recording time
     RecordCount = 2;
     mRNAnum = 0;
@@ -317,12 +320,12 @@ for i = 1:Runs
     for j = 1:length(Idx)
         plot(tspan,RibosomeRuns(i,:,j))
     end
-    %axis([50 125 0 160])
+    axis([400 450 0 200])
 end
 xlabel('Time (min)','FontSize',15)
 ylabel('Bound Ribosomes','FontSize',15)
 title('BoundRibosomePermRNA')
-saveas(gcf,'RibosomeTraces.jpg')
+saveas(gcf,'RebindRibosomeTraces.jpg')
 %%
 figure
 hold on
@@ -331,12 +334,12 @@ for i = 1:Runs
     for j = 1:length(Idx)
         plot(tspan,ProteinRuns(i,:,j))
     end
-    %axis([50 125 0 160])
+    axis([400 500 0 Inf])
 end
 xlabel('Time (min)','FontSize',15)
 ylabel('Protein per mRNA','FontSize',15)
 title('Protein produced per mRNA')
-saveas(gcf,'ProteinTraces.jpg')
+saveas(gcf,'RebindProteinTraces.jpg')
 
 %%
 figure
@@ -344,15 +347,25 @@ hold on
 for i = 1:Runs
     RibosomeTotals(i,:) = sum(RibosomeRuns(i,:,:),3);
     plot(RibosomeTotals(i,:))
+    axis([400 450 0 Inf])
 end
+xlabel('Time (min)','FontSize',15)
+ylabel('Bound Ribosomes Total','FontSize',15)
+title('Total Bound Ribosomes')
+saveas(gcf,'RebindTotalRibosomeTraces.jpg')
 figure
 hold on
 for i = 1:Runs
     ProteinTotals(i,:) = sum(ProteinRuns(i,:,:),3);
     plot(ProteinTotals(i,:))
+    axis([400 500 0 Inf])
 end
+xlabel('Time (min)','FontSize',15)
+ylabel('Protein Total','FontSize',15)
+title('Total Protein')
+saveas(gcf,'RebindTotalProteinTraces.jpg')
 %%
-save AllData
+save AllRebindData1Gene
 %%
 
 burstM = zeros(1000,Runs);
@@ -362,40 +375,43 @@ burstP = zeros(1000,Runs);
 for i = 1:Runs
     temp = AllmRNAArray(:,:,i);
     [Idx, ~] = find(temp(:,5));
-    temp = temp(1:length(Idx),:);
-	%dont count mRNA that have not decayed
-	for j = 1:length(temp(:,1))
-		if temp(j,1) == 1
-			temp(j,:) = NaN;
-		end
-	end
-	%temp(isnan(temp)) = [];		
-	
-% 	uniqueBursts = accumarray([temp(:,2),temp(:,3)],1);
-% 	pairs = unique([temp(:,2),temp(:,3)],'rows');
-	
-    count = 1;
-    burstIdx1 = temp(1,2);
-    burstIdx2 = temp(1,3);
-    burstM(count,i) = 1;
-    burstR(count,i) = temp(1,6);
-    burstP(count,i) = temp(1,7);
-    j = 2;
-    while j <= length(temp(:,1))
-        if temp(j,2) == burstIdx1 && temp(j,3) == burstIdx2
-            burstM(count,i) = burstM(count,i) + 1;
-            burstR(count,i) = burstR(count,i) + temp(j,6);
-            burstP(count,i) = burstP(count,i) + temp(j,7);
-        else
-            count = count + 1;
-            burstM(count,i) = burstM(count,i) + 1;
-            burstR(count,i) = burstR(count,i) + temp(j,6);
-            burstP(count,i) = burstP(count,i) + temp(j,7);
-            burstIdx1 = temp(j,2);
-            burstIdx2 = temp(j,3);
+    if isempty(Idx)
+    else
+        temp = temp(1:length(Idx),:);
+        %dont count mRNA that have not decayed
+        for j = 1:length(temp(:,1))
+            if temp(j,1) == 1
+                temp(j,:) = NaN;
+            end
         end
-        
-        j = j+ 1;
+        %temp(isnan(temp)) = [];		
+
+    % 	uniqueBursts = accumarray([temp(:,2),temp(:,3)],1);
+    % 	pairs = unique([temp(:,2),temp(:,3)],'rows');
+
+        count = 1;
+        burstIdx1 = temp(1,2);
+        burstIdx2 = temp(1,3);
+        burstM(count,i) = 1;
+        burstR(count,i) = temp(1,6);
+        burstP(count,i) = temp(1,7);
+        j = 2;
+        while j <= length(temp(:,1))
+            if temp(j,2) == burstIdx1 && temp(j,3) == burstIdx2
+                burstM(count,i) = burstM(count,i) + 1;
+                burstR(count,i) = burstR(count,i) + temp(j,6);
+                burstP(count,i) = burstP(count,i) + temp(j,7);
+            else
+                count = count + 1;
+                burstM(count,i) = burstM(count,i) + 1;
+                burstR(count,i) = burstR(count,i) + temp(j,6);
+                burstP(count,i) = burstP(count,i) + temp(j,7);
+                burstIdx1 = temp(j,2);
+                burstIdx2 = temp(j,3);
+            end
+
+            j = j+ 1;
+        end
     end
     burstR(:,i) = burstR(:,i)./burstM(:,i);
     burstP(:,i) = burstP(:,i)./burstM(:,i);
@@ -444,8 +460,8 @@ c = colormap(jet(length(binInterval)));
 plot(binInterval,binR,'linestyle','none','marker','o','markersize',8,'markerfacecolor','b','markeredgecolor','k')
 xlabel('Burst Size (mRNA per Burst)','FontSize',15)
 ylabel('Burst Size (Ribosomes per mRNA)','FontSize',15)
-title('Ribosomes per mRNA vs mRNA per Burst')
-saveas(gcf,'BurstSizemRNARibosome.jpg')
+title('Rebind Ribosomes per mRNA vs mRNA per Burst')
+saveas(gcf,'RebindBurstSizemRNARibosome.jpg')
 %%
 %Alt method of plotting burst
 % mean burst size and burst size for each run
