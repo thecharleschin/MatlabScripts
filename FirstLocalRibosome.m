@@ -1,23 +1,23 @@
 clear all
 close all
 rand('state',sum(100*clock)); %ok<RAND>
-MaxOutput = 100; %Maximum size expected of the output file
+MaxOutput = 1000; %Maximum size expected of the output file
 
 
-NumGenes = 5;
+NumGenes = 1;
 RibosomesInitial = 300*NumGenes;
-Runs = 1;
+Runs = 200;
 
-kON = .01;%gene burst on rate
+kON = .02;%gene burst on rate
 kOFF = 1; %gene burst off rate
 alpha = 2; %mRNA production rate
 gammam = log(2)/5; %mRNA decay rate, 5min halflife
-kIN = 1; %rebinding rate from local pool
-kOUT = .1; %rate to re-randomize, return to large pool
-kP = .1;
+kIN = .1; %rate of coming into local ribosome pool
+kOUT = 100; %rate of leaving local ribosome pool
+kP = 1; %protein Production rate
 gammap = log(2)/20;
 
-tMax = 500;
+tMax = 200;
 startTime = 1;
 dt = 1;
 tspan = startTime:dt:tMax;
@@ -33,7 +33,7 @@ Genes(NumGenes+1:end) = 1;
 
 GeneRuns = zeros(Runs,tspan2,NumGenes);
 
-BurstArray = zeros(MaxOutput,2,NumGenes);
+BurstArray = zeros(MaxOutput,3,NumGenes);
 BurstIdx = zeros(NumGenes,1);
 
 
@@ -70,7 +70,7 @@ x0(NumGenes*5+1) = RibosomesInitial;
 aAll = zeros(NumGenes*8,1);
 %
 
-for i = 1:Runs
+parfor i = 1:Runs
 
     disp('run')
     disp(i)
@@ -82,10 +82,15 @@ for i = 1:Runs
     X(1,:)   = x0;
     xCurrent = x0;
 
+    aAll = zeros(NumGenes*8,1);
     
     RecordTime = dt; %Recording time
     RecordCount = 2;
     mRNAnum = 0;
+    StartCount = 0;
+    BurstIdx = zeros(NumGenes,1);
+    BurstArray = zeros(MaxOutput,3,NumGenes);
+    BurstStartCount = BurstIdx;
     count = 1;
     OnDuration = zeros(MaxOutput,1);
     OnTimes = zeros(MaxOutput,1);
@@ -109,12 +114,12 @@ for i = 1:Runs
             aAll(j+NumGenes) = kOFF*StateON(j); %Burst OFF
             aAll(j+NumGenes*2) = alpha*StateON(j); %Transcription
             aAll(j+NumGenes*3) = gammam*mRNA(j); %mRNADecay
-            aAll(j+NumGenes*4) = Global*kIN*mRNA(j);% LocalIN
-            if mRNA(j) == 0
-                aAll(j+NumGenes*5) = Local(j)*kOUT; %LocalOUT
-            else
-                aAll(j+NumGenes*5) = Local(j)*kOUT/mRNA(j);
-            end
+            aAll(j+NumGenes*4) = Global*kIN;%*mRNA(j);% LocalIN
+%             if mRNA(j) == 0
+%                 aAll(j+NumGenes*5) = Local(j)*kOUT; 
+%             else
+            aAll(j+NumGenes*5) = Local(j)*kOUT/(mRNA(j)+1);%LocalOUT
+%             end
             aAll(j+NumGenes*6) = kP*mRNA(j)*Local(j); %Translation
             aAll(j+NumGenes*7) = gammap*Protein(j);    %ProteinDecay
         end
@@ -144,24 +149,129 @@ for i = 1:Runs
             RecordTime = RecordTime + dt;
         end
         
-            mu  = find((cumsum(aAll) >= r(2)*a0),1,'first');
-            T   = T  + tau;
-            xCurrent = xCurrent + RxnMatrix(mu,:);
+        mu  = find((cumsum(aAll) >= r(2)*a0),1,'first');
+        T   = T  + tau;
+        xCurrent = xCurrent + RxnMatrix(mu,:);
+        
+        
+        if mu <= NumGenes %if burst on
+            BurstIdx(mu) = BurstIdx(mu) + 1;
+            BurstArray(BurstIdx(mu),3) = T; 
+        elseif mu > NumGenes*2 && mu <= NumGenes*3 %if make mRNA
+            BurstArray(BurstIdx(mu - NumGenes*2),1,mu - NumGenes*2) = ...
+                BurstArray(BurstIdx(mu - NumGenes*2),1,mu - NumGenes*2) +1;
+        elseif mu > NumGenes*6 && mu <= NumGenes*7 %if make Protein
+            BurstArray(BurstIdx(mu - NumGenes*6),2,mu - NumGenes*6) = ...
+                BurstArray(BurstIdx(mu - NumGenes*6),2,mu - NumGenes*6) +1;
+        end
+        if T >= startTime/dt && StartCount == 0
+             BurstStartCount = BurstIdx;
+             StartCount = 1;
+        end
 
-            if mu <= NumGenes
-                BurstIdx(mu) = BurstIdx(mu) + 1;
-            elseif mu > NumGenes*2 && mu <= NumGenes*3
-                BurstArray(BurstIdx(mu - NumGenes*2),1,mu - NumGenes*2) = ...
-                    BurstArray(BurstIdx(mu - NumGenes*2),1,mu - NumGenes*2) +1;
-            elseif mu > NumGenes*4 && mu <= NumGenes*5
-                BurstArray(BurstIdx(mu - NumGenes*4),2,mu - NumGenes*4) = ...
-                    BurstArray(BurstIdx(mu - NumGenes*4),2,mu - NumGenes*4) +1;
-            end
     end
 
 
     % Record output
      X(RecordCount,:) = xCurrent;
    
-
+    
+     AllRuns(:,:,i) = X(1:tMax/dt,:);
+     AllBurstArray(:,:,:,i) = BurstArray;
+     AllBurstIdx(:,i) = BurstIdx;
+     AllGene(:,:,i) = X(1:tMax/dt,1:NumGenes*2);
+     AllmRNA(:,:,i) = X(1:tMax/dt,NumGenes*2+1:NumGenes*3);
+     AllLocal(:,:,i) = X(1:tMax/dt,NumGenes*3+1:NumGenes*4);
+     AllProtein(:,:,i) = X(1:tMax/dt,NumGenes*4+1:NumGenes*5);
+     AllBurstStartCount(:,i) = BurstStartCount;
+    
 end
+
+%%
+%Pull out burst information
+for i = 1:Runs
+    Bursttemp = AllBurstArray(:,:,:,i);
+    BurstPtemp = zeros(MaxOutput,NumGenes);
+    BurstMtemp = zeros(MaxOutput,NumGenes);
+    
+    for j = 1:NumGenes
+        BurstPtemp(:,j) = Bursttemp(:,2,j)./Bursttemp(:,1,j);
+        BurstMtemp(:,j) = Bursttemp(:,1,j);
+        
+        if AllBurstStartCount(j,i) <= 1
+        else
+            BurstPtemp(1:AllBurstStartCount(j,i)-1,j) = NaN;
+            BurstMtemp(1:AllBurstStartCount(j,i)-1,j) = NaN;
+        end
+        
+    end
+    BurstMtemp(BurstMtemp == 0) = NaN;
+    BurstPtemp(BurstPtemp == Inf) = NaN;
+    
+    BurstM(i) = nanmean(BurstMtemp(:));
+    BurstP(i) = nanmean(BurstPtemp(:));
+    BurstMAll(:,i) = BurstMtemp(:);
+    BurstPAll(:,i) = BurstPtemp(:);
+    
+end
+
+save AllData
+%%
+hold on
+xtemp = .1:.1:4;
+ytemp = 5.*xtemp.^2;
+plot(xtemp,ytemp,'k')
+
+xtemp = .1:.1:4;
+ytemp = 5.*xtemp.^3;
+plot(xtemp,ytemp,'b')
+xtemp = .1:.1:4;
+ytemp = 5.*xtemp.^1;
+plot(xtemp,ytemp,'r')
+
+plot(BurstM,BurstP,'linestyle','none','marker','.','markersize',10)
+set(gca,'YScale','log');
+axis([0 Inf .1 Inf])
+xlabel('Burst Size (mRNA per Burst)','FontSize',15)
+ylabel('Burst Size (Protein per mRNA)','FontSize',15)
+name = sprintf('transcriptional vs translational BS');
+title(name)
+name = sprintf('BSPlot.jpg');
+saveas(gcf,name)
+%%
+figure
+hold on
+%bin data to take average
+binInterval = 0:1:10;
+burstMbin = BurstMAll(:);
+burstPbin = BurstPAll(:);
+burstMbin(burstMbin == 0) = NaN;
+%burstR(isnan(burstR)) = [];
+binM = zeros(length(binInterval),1);
+binP = binM;
+binPnum = binP;
+
+for i = 2:length(binInterval)
+	for j = 1:length(burstPbin(:))
+		if burstMbin(j) >= binInterval(i-1) && burstMbin(j) < binInterval(i)
+			binM(i-1) = burstMbin(j); 
+            if isnan(burstPbin(j))
+            else
+                binP(i-1) = binP(i-1) + burstPbin(j);
+                binPnum(i-1) = binPnum(i-1) + 1;
+            end
+        end
+    end
+end
+binP = binP ./ binPnum;
+plot(BurstMAll(:),BurstPAll(:),'linestyle','none','marker','.','markersize',10)
+plot(binInterval,binP,'linestyle','none','marker','o','markersize',8,...
+    'markerfacecolor','b','markeredgecolor','k')
+set(gca,'YScale','log');
+axis([0 Inf .1 Inf])
+xlabel('Burst Size (mRNA per Burst)','FontSize',15)
+ylabel('Burst Size (Protein per mRNA)','FontSize',15)
+name = sprintf('transcriptional vs translational BS');
+title(name)
+name = sprintf('BSPlot2.jpg');
+saveas(gcf,name)
