@@ -3,10 +3,10 @@ close all
 rand('state',sum(100*clock)); %#ok<RAND>
 
 gammam = log(2)/60; %1 hour halflife
-gammap = log(2)/120;%2 hour halflife
+gammap = log(2)/90;%1.5 hour halflife
 kExport = gammam;
 kONArray = [0.1,0.5,1,5,10].*kExport;
-kP = gammap*100;
+kP = gammam*100;
 
 
 
@@ -21,7 +21,7 @@ for n = 1:length(kONArray)
     disp(k)
 
     kOFF = VarArray(k);
-    alpha = 5*kOFFArray(2);
+    alpha = 5;
 
 
 
