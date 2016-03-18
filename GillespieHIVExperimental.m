@@ -4,17 +4,21 @@ clear all
 close all
 rand('state',sum(100*clock)); %#ok<RAND>
 
-Runs = 30;
+Runs = 50;
 
-paramArray = [.1,.5,1,5,10];
+paramArray = logspace(0,2,5);%[.1,.5,1,5,10];
 paramArray = paramArray./60;
 
 for k = 1:length(paramArray)
+    disp('Case')
+    disp(k)
     %Parameters
-    kON = 0; %burst on
-    kOFF = 0; %burst off
-    kM = 42.4/60;%.87/60;%120.98/60; %transcription
+    kON1 = .015; %burst on
+    kON2 = .005;
+    kOFF = 1/20; %burst off
+    kM = 120.98/60;%42.4/60;%.87/60;%120.98/60; %transcription
     kS = paramArray(k); %splicing 
+    Sfrac = .046; %fraction of splices that make Rev
     kP = 270/60; %translation
     gammams = .173/60; %mRNAdecay (of spliced)
     gammam = 0;%.173/60; %mRNAdecay (unspliced)
@@ -38,10 +42,10 @@ for k = 1:length(paramArray)
     % kR4f = 1.59*60; %one rev binding to mRNA for 4 bound
     % kR4r = log(2)/(3.30/60); %one rev unbinding to mRNA for 3 bound
 
-    kexport = 14.4/60; %export of mRNA and bound rev molecules value from Wen Thesis
-    offTime = 3000;
+    kexport = 5.53/60; %export of mRNA and bound rev molecules value from Wen Thesis
+    offTime = 5000;
 
-    tMax = 6000;
+    tMax = 10000;
     dt = 1;
     tspan = 0:dt:tMax;
     tspan2 = length(tspan);
@@ -78,7 +82,8 @@ for k = 1:length(paramArray)
                   0  0  0  0  0  0  0  0 -1  0];%Rev4 decay
 
     parfor i = 1:Runs
-
+        
+        disp(i)
         p = 1;
         Onflag = x0(3);
         mRNAperBurst = zeros(100000,1);
@@ -95,19 +100,20 @@ for k = 1:length(paramArray)
         OnTrack = 0;
         count = 1;
         displayTime = 0;
+        kON = kON1;
 
         %%%%%%%%%%%%%%%%%%%%%%
         %Gillespie Simulation%
         %%%%%%%%%%%%%%%%%%%%%%
 
         while T <= tMax
-            if T > displayTime
-                disp(T)
-                displayTime = displayTime + 10;
-            end
+%             if T > displayTime
+% %                 disp(T)
+% %                 displayTime = displayTime + 10;
+%             end
             if T > offTime 
-                xCurrent(1) = 0;
-                xCurrent(2) = 1;
+                kON = kON2;
+
             end
 
             x = xCurrent;
@@ -167,7 +173,15 @@ for k = 1:length(paramArray)
 
             %find the next change in state before tau
             T   = T  + tau;
+            if mu == 4
+                if rand() < Sfrac
+                     xCurrent = xCurrent + RxnMatrix(mu,:);
+                else
+                    xCurrent = xCurrent + [0  0 -1  0  0  0  0  0  0  0];
+                end
+            else
             xCurrent = xCurrent + RxnMatrix(mu,:);
+            end
 
         end
 
@@ -177,6 +191,9 @@ for k = 1:length(paramArray)
          AllTraces(:,:,i) = X(1:tMax/dt,:);
     end
     meanRev(:,k) = mean(AllTraces(:,5,:),3);
+    temp =  AllTraces(:,5,:);
+    temp = reshape(temp,[tMax/dt,Runs]);
+    AllRev(:,:,k) = temp;
 end
 save AllHIVData
 %%
@@ -195,6 +212,7 @@ name = sprintf('Rev Traces Relaxation');
 title(name)
 name = sprintf('RevTraces.jpg');
 saveas(gcf,name)
+%%
 figure
 hold on
 for i = 1:length(paramArray)
@@ -205,11 +223,17 @@ for i = 1:length(paramArray)
         'displayname',name);
 end
 legend(linestore,'location','northeast')
+axis([0 2000 0.3 1.1])
 xlabel('Time after off (min)','FontSize',15)
 ylabel('Normalized Rev Abundance','FontSize',15)
 name = sprintf('Normalized Rev Traces');
 title(name)
 name = sprintf('RevTracesNorm.jpg');
+saveas(gcf,name)
+%%
+set(gca,'YScale','log');
+axis([0 1500 10^-2 10])
+name = sprintf('RevTracesNormSemilog.jpg');
 saveas(gcf,name)
 %plotting
 % subplot(3,1,1);
