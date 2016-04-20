@@ -66,6 +66,15 @@ while T <= tMax
     tau = (1/a0)*log(1/r(1));
 
     %Store information if at time
+    tau0 = tau;
+    if tau0 > dt
+        while tau0 > dt
+            X(RecordCount,:) = xCurrent;
+            RecordCount = RecordCount + 1;
+            RecordTime = RecordTime + dt;
+            tau0 = tau0 - dt;
+        end
+    end
     if T + tau > RecordTime
         X(RecordCount,:) = xCurrent;
 
