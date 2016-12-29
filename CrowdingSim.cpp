@@ -4,9 +4,10 @@
 //#include "stdafx.h"
 
 
+
 //  Paul Mlynarczyk
 //	Modified by Charles Chin
-//  This program simulates particles reacting and diffusing in a biochemical reaction network defined by the reversible reaction equations: A <--> X, A + 2X <--> 3X
+//  This program simulates particles reacting and diffusing in a biochemical reaction network defined by a simple 2 particle bursting system and mRNA productiion
 //  The reaction volume is 3-dimensional
 //  Modifed to have transcription in a crowded environment
 
@@ -70,6 +71,7 @@ public:
 	ofstream myfilemRNAsum;
 	ofstream myfileEncT;
 	ofstream myfileEncD;
+	ofstream myfileTime;
 	void setRates(double, double, double, double);
 	int sumTotalX(void);
 	void populateParticles(int, int, char);
@@ -80,11 +82,11 @@ public:
 
 void Reactor::setRates(double kmin, double gmin, double k_hop_in, double k_hopC_in)
 {
-	double volume = (xmax*ymax*zmax)*pow(h,3);
-	km = kmin*(volume/pow(h,3));
+	double volume = (xmax*ymax*zmax)*pow(h, 3);
+	km = kmin*(volume / pow(h, 3));
 	gm = gmin;
-	k_hop = (6*k_hop_in)/pow(h,2);
-	k_hopC = (6*k_hopC_in)/pow(h, 2);
+	k_hop = (6 * k_hop_in) / pow(h, 2);
+	k_hopC = (6 * k_hopC_in) / pow(h, 2);
 }
 
 void Reactor::populateParticles(int nXinit, int nptot, char pos)
@@ -99,7 +101,7 @@ void Reactor::populateParticles(int nXinit, int nptot, char pos)
 			}
 		}
 	}
-	
+
 	nTF0 = nXinit;
 	nG0 = nptot;
 	//int nA0 = np - nX0;
@@ -118,7 +120,7 @@ void Reactor::populateParticles(int nXinit, int nptot, char pos)
 			}
 		}
 	}
-	
+
 	int i = 0;
 	while (i < nG0) { //populate initial A particles
 		int rx = floor(real_rand()*xmax);
@@ -126,10 +128,13 @@ void Reactor::populateParticles(int nXinit, int nptot, char pos)
 		int rz = floor(real_rand()*zmax);
 		if (Cnv[rx][ry][rz] == 0) {
 			Gnv[rx][ry][rz] = Gnv[rx][ry][rz] + 1;   //increment [A]
-			GCurrent = { rx,ry,rz };
+			GCurrent[1] = rx;
+			GCurrent[2] = ry;
+			GCurrent[3] = rz;
+
 			i++;
 		}
-		
+
 	}
 
 	i = 0;
@@ -139,20 +144,22 @@ void Reactor::populateParticles(int nXinit, int nptot, char pos)
 		int rz = floor(real_rand()*zmax);
 		if (Cnv[rx][ry][rz] == 0) {
 			TFnv[rx][ry][rz] = TFnv[rx][ry][rz] + 1;   //increment [X]
-			TFCurrent = { rx,ry,rz };
+			TFCurrent[1] = rx;
+			TFCurrent[2] = ry;
+			TFCurrent[3] = rz;
 			i++;
 		}
-		
+
 	}
-	
+
 
 }
 
 
 void Reactor::calcPropensities(int x, int y, int z)
 {
-	
-	a[x][y][z][0] = km*Gnv[x][y][z]*TFnv[x][y][z];  //compute propensities in voxel (x,y,z)
+
+	a[x][y][z][0] = km*Gnv[x][y][z] * TFnv[x][y][z];  //compute propensities in voxel (x,y,z)
 	a[x][y][z][1] = gm*mRNAnv[x][y][z];
 	a[x][y][z][2] = k_hop*(Gnv[x][y][z] + TFnv[x][y][z]);
 	a[x][y][z][3] = k_hopC*Cnv[x][y][z];
@@ -229,7 +236,7 @@ void Reactor::writeOut()
 	}
 	myfilemRNA << endl;
 
-	
+
 
 	myfilemRNAsum << mRNAsum << "    ";
 	myfilemRNAsum << endl;
@@ -266,12 +273,13 @@ int main(int argc, char* const argv[])
 	stringstream ssmRNA;
 	stringstream encTimes;
 	stringstream encDur;
+	stringstream elapsedTime;
 	(R.myfileG).open("G_output.txt");   //open output files
 	(R.myfileTF).open("TF_output.txt");
 	(R.myfileC).open("C_output.txt");
 	(R.myfilemRNA).open("mRNA_output.txt");
-	
-	ssmRNA << "/data/home/cchin/mRNA_Run" << R.xmax << "x" << R.ymax << "x" << R.zmax << "D6"  << "Crowd" << R.crowdingFrac << "Run" << SGE_TASK_ID << ".txt";
+
+	ssmRNA << "/data/home/cchin/mRNA_Run" << R.xmax << "x" << R.ymax << "x" << R.zmax << "D6" << "Crowd" << R.crowdingFrac << "Run" << SGE_TASK_ID << ".txt";
 	string filenameX = ssmRNA.str();
 	(R.myfilemRNAsum).open(filenameX);
 	encTimes << "/data/home/cchin/encT_Run" << R.xmax << "x" << R.ymax << "x" << R.zmax << "D6" << "Crowd" << R.crowdingFrac << "Run" << SGE_TASK_ID << ".txt";
@@ -280,6 +288,9 @@ int main(int argc, char* const argv[])
 	encDur << "/data/home/cchin/encD_Run" << R.xmax << "x" << R.ymax << "x" << R.zmax << "D6" << "Crowd" << R.crowdingFrac << "Run" << SGE_TASK_ID << ".txt";
 	string filenameeD = encDur.str();
 	(R.myfileEncD).open(filenameeD);
+	elapsedTime << "/data/home/cchin/Time_Run" << R.xmax << "x" << R.ymax << "x" << R.zmax << "D6" << "Crowd" << R.crowdingFrac << "Run" << SGE_TASK_ID << ".txt";
+	string filenametime = elapsedTime.str();
+	(R.myfileTime).open(filenametime);
 	//(R.myfilemRNAsum).open("mRNAsum_output.txt");
 
 
@@ -333,8 +344,8 @@ int main(int argc, char* const argv[])
 		}
 		if (q == 0) {  //reaction chosen
 			R.mRNAnv[j][k][l] += 1;// vj[q][0];
-			//R.Anv[j][k][l] += vj[q][0];
-			//R.Xnv[j][k][l] += vj[q][1];
+								   //R.Anv[j][k][l] += vj[q][0];
+								   //R.Xnv[j][k][l] += vj[q][1];
 		}
 		else if (q == 1) {
 			R.mRNAnv[j][k][l] -= 1;
@@ -361,29 +372,36 @@ int main(int argc, char* const argv[])
 				if (real_rand() < probA) {  //if A particle
 					R.Gnv[j][k][l] -= 1;  //decrement conc of G in vox (j,k)
 					R.Gnv[m][n][p] += 1;  //increment conc of G in vox (m,n)
-					R.GCurrent = { m,n,p };
+					R.GCurrent[1] = m;
+					R.GCurrent[2] = n;
+					R.GCurrent[3] = p;
 				}
 				else {   //if X particle
 					R.TFnv[j][k][l] -= 1;  //decrement conc of TF in vox (j,k)
 					R.TFnv[m][n][p] += 1;  //increment conc of TF in vox (m,n)
-					R.TFCurrent = { m,n,p };
+					R.TFCurrent[1] = m;
+					R.TFCurrent[2] = n;
+					R.TFCurrent[3] = p;
 				}
 
 				//calculate encounter properties
-				if (R.GCurrent == R.TFCurrent) {
-					if (meet == 0) {
-						meet = 1;
-						R.encT = tn;
-						//write out encounter time
-						myfileEncT << R.encT << endl;
+				if (R.GCurrent[1] == R.TFCurrent[1]) {
+					if (R.GCurrent[2] == R.TFCurrent[2]) {
+						if (R.GCurrent[3] == R.TFCurrent[3]) {
+							if (meet == 0) {
+								meet = 1;
+								R.encT = tn;
+								//write out encounter time
+								R.myfileEncT << R.encT << endl;
+							}
+						}
 					}
-
 				}
 				else if (meet == 1) {
 					meet = 0;
 					//write out encounter duration
 					R.encD = tn - R.encT;
-					myfileEncD << R.encD << endl;
+					R.myfileEncD << R.encD << endl;
 				}
 
 				R.a0 -= R.amn[m][n][p];
@@ -412,7 +430,7 @@ int main(int argc, char* const argv[])
 			if (reject == 0) {
 				R.Cnv[j][k][l] -= 1;  //decrement conc of C in vox (j,k)
 				R.Cnv[m][n][p] += 1;  //increment conc of C in vox (m,n)
-				
+
 				R.a0 -= R.amn[m][n][p];
 				R.calcPropensities(m, n, p);  //update propensities of modified voxel
 				R.a0 += R.amn[m][n][p];
@@ -430,6 +448,9 @@ int main(int argc, char* const argv[])
 	}
 	cout << endl;
 
+	clock_t end = clock();
+	double time = (double)(end - start) / CLOCKS_PER_SEC;
+	R.myfileTime << time << endl;
 
 	(R.myfileG).close();
 	(R.myfileTF).close();
@@ -438,10 +459,10 @@ int main(int argc, char* const argv[])
 	(R.myfilemRNAsum).close();
 	(R.myfileEncT).close();
 	(R.myfileEncD).close();
+	(R.myfileTime).close();
 	cout << "Done" << endl;
 	//OutputDebugStringA("done");
-	clock_t end = clock();
-	double time = (double)(end - start) / CLOCKS_PER_SEC;
+
 	cout << "Time Elapsed: " << time << endl;
 	return 0;   //indicate successful termination
 }
